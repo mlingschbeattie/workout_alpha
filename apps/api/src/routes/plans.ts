@@ -98,6 +98,32 @@ router.get('/for-user/:userId', async (req, res) => {
   });
 });
 
+  // Mark a day complete
+router.post('/for-user/:userId/complete', async (req, res) => {
+  const userId = req.params.userId;
+  const date = String(req.body.date || new Date().toISOString().slice(0,10));
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { completedDates: { push: date } }
+  });
+
+  res.json(user);
+});
+
+// Mark a day complete
+router.post('/for-user/:userId/complete', async (req, res) => {
+  const userId = req.params.userId;
+  const date = String(req.body.date || new Date().toISOString().slice(0,10));
+
+  const user = await prisma.user.update({
+    where: { id: userId },
+    data: { completedDates: { push: date } }
+  });
+
+  res.json(user);
+});
+
 
 export default router;
 

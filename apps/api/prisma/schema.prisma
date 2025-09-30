@@ -43,6 +43,7 @@ model Plan {
   weeks     Int
   days      Json
   createdAt DateTime @default(now())
+  completedDates String[] @default([])
 
 //reverse lookup
 users User[]

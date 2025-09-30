@@ -123,5 +123,46 @@ router.get('/compliance', async (req, res) => {
   res.json(result);
 });
 
+router.get('/summary', async (req, res) => {
+  const { userId, planId } = req.query;
+  const where: any = {};
+
+  if (userId) where.userId = String(userId);
+  if (planId) where.user = { planId: String(planId) };
+
+  const logs = await prisma.log.findMany({ where });
+
+  const totalVolume = logs.reduce((a, b) => a + (b.volume || 0), 0);
+  const totalReps = logs.reduce((a, b) => a + (b.reps || 0), 0);
+
+  res.json({ count: logs.length, totalVolume, totalReps });
+});
+
+import { Parser } from 'json2csv';
+
+router.get('/export/csv', async (req, res) => {
+  const { userId } = req.query;
+  const where = userId ? { userId: String(userId) } : {};
+  const logs = await prisma.log.findMany({ where, include: { exercise: true } });
+
+  const parser = new Parser({
+    fields: ['date', 'exerciseName', 'setNumber', 'reps', 'weight', 'rpe', 'volume']
+  });
+  const csv = parser.parse(logs.map(l => ({
+    date: l.date.toISOString().slice(0,10),
+    exerciseName: l.exercise?.name || l.exerciseName,
+    setNumber: l.setNumber,
+    reps: l.reps,
+    weight: l.weight,
+    rpe: l.rpe,
+    volume: l.volume
+  })));
+
+  res.header('Content-Type', 'text/csv');
+  res.attachment('logs.csv');
+  res.send(csv);
+});
+
+
 export default router;
 
