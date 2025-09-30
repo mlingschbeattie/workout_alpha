@@ -69,5 +69,33 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// Assign a plan to a user
+router.post('/users/:id/assign-plan', async (req, res) => {
+  const userId = req.params.id;
+  const planId = String(req.body?.planId || '').trim();
+  if (!planId) return res.status(400).json({ error: 'planId required' });
+
+  const [user, plan] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.plan.findUnique({ where: { id: planId } }),
+  ]);
+  if (!user) return res.status(404).json({ error: 'user not found' });
+  if (!plan) return res.status(404).json({ error: 'plan not found' });
+
+  const updated = await prisma.user.update({ where: { id: userId }, data: { planId } });
+  res.json(updated);
+});
+
+// Unassign plan (set null)
+router.post('/users/:id/unassign-plan', async (req, res) => {
+  const userId = req.params.id;
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return res.status(404).json({ error: 'user not found' });
+
+  const updated = await prisma.user.update({ where: { id: userId }, data: { planId: null } });
+  res.json(updated);
+});
+
+
 export default router;
 

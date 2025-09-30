@@ -3,12 +3,66 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id    String @id @default(cuid())
-  name  String
-  role  String
+enum Role {
+  ATHLETE
+  COACH
+  ADMIN
 }
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      Role     @default(ATHLETE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  logs      Log[]
+
+planId String?
+plan Plan?	@relation(fields: [planId], references: [id], onDelete: SetNull) 
+}
+
+
+model Exercise {
+  id        String   @id @default(cuid())
+  name      String
+  category  String
+  type      String?
+  target    String?
+  createdAt DateTime @default(now())
+  logs      Log[]
+}
+
+model Plan {
+  id        String   @id @default(cuid())
+  name      String
+  weeks     Int
+  days      Json
+  createdAt DateTime @default(now())
+
+//reverse lookup
+users User[]
+}
+
+model Log {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  exerciseId   String?
+  exercise     Exercise? @relation(fields: [exerciseId], references: [id])
+  exerciseName String?
+  date         DateTime
+  week         Int?
+  dayId        String?
+  dayTitle     String?
+  setNumber    Int
+  reps         Int
+  weight       Float
+  rpe          Float?
+  volume       Float
+  createdAt    DateTime  @default(now())
+}
+
