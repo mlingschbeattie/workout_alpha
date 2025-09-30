@@ -22,7 +22,8 @@ model User {
   logs      Log[]
 
 planId String?
-plan Plan?	@relation(fields: [planId], references: [id], onDelete: SetNull) 
+plan Plan?	@relation(fields: [planId], references: [id], onDelete: SetNull)
+planStartDate DateTime? 
 }
 
 

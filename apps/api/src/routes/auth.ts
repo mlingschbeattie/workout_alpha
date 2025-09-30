@@ -96,6 +96,20 @@ router.post('/users/:id/unassign-plan', async (req, res) => {
   res.json(updated);
 });
 
+// Set or clear a user's planStartDate
+router.post('/users/:id/plan-start', async (req, res) => {
+  const userId = req.params.id;
+  // Body: { date?: 'YYYY-MM-DD' | null }
+  const raw = (req.body?.date ?? '').toString().trim();
+  const planStartDate = raw ? new Date(raw) : null;
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) return res.status(404).json({ error: 'user not found' });
+
+  const updated = await prisma.user.update({ where: { id: userId }, data: { planStartDate } });
+  res.json(updated);
+});
+
 
 export default router;
 
