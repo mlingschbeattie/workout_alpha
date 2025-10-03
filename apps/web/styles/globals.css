@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+  --ua-black:#0B0B0B;
+  --ua-red:#D62828;
+  --ua-white:#FFFFFF;
+}
+
+html,body,#__next{ height:100%; }
+
+/* Typography (strong, athletic) */
+h1,h2,h3 { @apply font-semibold tracking-tight; }
+p { @apply text-[15px] leading-6; }
+
+.ua-container { @apply mx-auto w-full max-w-6xl px-4; }
+.ua-card { @apply rounded-2xl border border-black/5 bg-white shadow-card; }
+.ua-card-dark { @apply rounded-2xl border border-white/10 bg-black shadow-card; }
+
+.ua-btn { @apply inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold transition; }
+.ua-btn-primary { @apply bg-[var(--ua-red)] text-white hover:bg-red-600; }
+.ua-btn-ghost { @apply border border-black/10 bg-white text-black hover:bg-black/5; }
+.ua-btn-dark { @apply bg-white text-black hover:bg-white/90; }
+
+.ua-input { @apply w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red; }
+.ua-select { @apply ua-input; }
+.ua-textarea { @apply ua-input; }
+
+.ua-section { @apply py-10 sm:py-14; }
+
+/* Header shadow on scroll (optional JS hook adds .is-scrolled) */
+.ua-header.is-scrolled { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+
+
+/* apps/web/styles/globals.css */
+.input {
+  @apply w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent;
+}
+
+.select {
+  @apply w-full rounded-md border border-gray-300 px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent;
+}
+
+.textarea {
+  @apply w-full rounded-md border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent;
+}
+
+.btn-primary {
+  @apply w-full bg-red-600 text-white py-2 rounded-md font-semibold hover:bg-red-700 transition;
+}
+
+.btn-secondary {
+  @apply w-full bg-gray-200 text-gray-800 py-2 rounded-md font-semibold hover:bg-gray-300 transition;
+}
+
