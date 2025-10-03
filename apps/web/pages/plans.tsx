@@ -1,60 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '../lib/api';
+import { useEffect, useMemo, useState } from "react";
+import { api } from "../lib/api";
+import FormWrapper from "../components/FormWrapper";
 
 type Plan = { id:string; name:string; weeks:number; days:any; createdAt:string };
 type User = { id:string; name:string; role:'ATHLETE'|'COACH'|'ADMIN'; planId?:string|null };
 
-const DEFAULT_DAYS_TEMPLATE = [
+const DEFAULT_DAYS = [
   { id: 'day1', title: 'Upper Power', exercises: [{ name: 'Med Ball Chest Pass', target: '3x5' }] },
   { id: 'day2', title: 'Lower Power', exercises: [{ name: 'Broad Jump', target: '5x3' }] },
 ];
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [selectedId, setSelectedId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string>('');
+  const [err, setErr] = useState('');
 
-  // form state
+  // form
   const [name, setName] = useState('');
   const [weeks, setWeeks] = useState<number>(4);
-  const [daysJson, setDaysJson] = useState<string>(JSON.stringify(DEFAULT_DAYS_TEMPLATE, null, 2));
+  const [daysJson, setDaysJson] = useState<string>(JSON.stringify(DEFAULT_DAYS, null, 2));
 
-  // NEW: users + selection for assignment
-  const [users, setUsers] = useState<User[]>([]);
-  const [assignUserId, setAssignUserId] = useState<string>('');
+  const [assignUserId, setAssignUserId] = useState('');
 
   const selected = useMemo(() => plans.find(p => p.id === selectedId) || null, [plans, selectedId]);
 
   async function load() {
     setErr('');
     try {
-      const [list, userList] = await Promise.all([
+      const [p, u] = await Promise.all([
         api<Plan[]>('/plans'),
         api<User[]>('/auth/users'),
       ]);
-      setPlans(list);
-      setUsers(userList);
-      if (list.length && !list.find(p => p.id === selectedId)) setSelectedId(list[0].id);
+      setPlans(p);
+      setUsers(u);
+      if (p.length && !p.find(x => x.id === selectedId)) setSelectedId(p[0].id);
     } catch (e:any) { setErr(`Failed to load: ${e?.message || e}`); }
   }
-  useEffect(() => { load(); }, []);
+  useEffect(()=>{ load(); }, []);
 
-  function hydrateFormFromSelected() {
+  useEffect(() => {
     if (!selected) return;
     setName(selected.name);
     setWeeks(selected.weeks);
     setDaysJson(JSON.stringify(selected.days ?? [], null, 2));
-  }
-  useEffect(() => { hydrateFormFromSelected(); }, [selectedId]);
+  }, [selectedId]);
 
-  function resetFormToTemplate() {
-    setName(''); setWeeks(4);
-    setDaysJson(JSON.stringify(DEFAULT_DAYS_TEMPLATE, null, 2));
-    setSelectedId('');
-  }
-
-  function parseDaysOrError(): any | null {
+  function parseDays(): any | null {
     try {
       const parsed = JSON.parse(daysJson || '[]');
       if (!Array.isArray(parsed)) throw new Error('Days must be an array');
@@ -62,177 +54,132 @@ export default function PlansPage() {
     } catch (e:any) { setErr(`Days JSON invalid: ${e?.message || e}`); return null; }
   }
 
-  async function createPlan() {
-    setErr('');
-    const days = parseDaysOrError(); if (!days) return;
-    if (!name.trim()) return setErr('Name is required');
-    setLoading(true);
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const days = parseDays(); if (!days) return;
+    if (!name.trim()) return setErr('Name required');
     try {
-      await api('/plans', { method:'POST', body: JSON.stringify({ name: name.trim(), weeks: Number(weeks)||1, days }) });
-      resetFormToTemplate(); await load();
-    } catch (e:any) { setErr(`Create failed: ${e?.message || e}`); }
-    finally { setLoading(false); }
-  }
-
-  async function savePlan() {
-    if (!selectedId) return createPlan();
-    setErr('');
-    const days = parseDaysOrError(); if (!days) return;
-    if (!name.trim()) return setErr('Name is required');
-    setLoading(true);
-    try {
-      await api(`/plans/${selectedId}`, { method:'PATCH', body: JSON.stringify({ name: name.trim(), weeks: Number(weeks)||1, days }) });
+      if (selectedId) {
+        await api(`/plans/${selectedId}`, { method:'PATCH', body: JSON.stringify({ name: name.trim(), weeks: Number(weeks)||1, days }) });
+      } else {
+        await api('/plans', { method:'POST', body: JSON.stringify({ name: name.trim(), weeks: Number(weeks)||1, days }) });
+      }
+      setName(''); setWeeks(4); setDaysJson(JSON.stringify(DEFAULT_DAYS, null, 2)); setSelectedId('');
       await load();
     } catch (e:any) { setErr(`Save failed: ${e?.message || e}`); }
-    finally { setLoading(false); }
   }
 
-  async function deletePlan() {
+  async function remove() {
     if (!selectedId) return setErr('Select a plan to delete.');
     if (!confirm('Delete this plan?')) return;
-    setErr(''); setLoading(true);
-    try {
-      await api(`/plans/${selectedId}`, { method:'DELETE' });
-      setSelectedId(''); resetFormToTemplate(); await load();
-    } catch (e:any) { setErr(`Delete failed: ${e?.message || e}`); }
-    finally { setLoading(false); }
+    await api(`/plans/${selectedId}`, { method:'DELETE' });
+    setSelectedId(''); await load();
   }
 
-  // NEW: assign & unassign
-  async function assignPlan() {
-    if (!selectedId) return setErr('Select a plan first.');
-    if (!assignUserId) return setErr('Select a user to assign.');
-    setErr('');
-    try {
-      await api(`/auth/users/${assignUserId}/assign-plan`, {
-        method:'POST', body: JSON.stringify({ planId: selectedId })
-      });
-      const userList = await api<User[]>('/auth/users');
-      setUsers(userList);
-    } catch (e:any) { setErr(`Assign failed: ${e?.message || e}`); }
+  async function assign() {
+    if (!selectedId || !assignUserId) return;
+    await api(`/auth/users/${assignUserId}/assign-plan`, { method:'POST', body: JSON.stringify({ planId: selectedId }) });
+    setAssignUserId('');
+    await load();
   }
-
-  async function unassignPlan(uid: string) {
-    setErr('');
-    try {
-      await api(`/auth/users/${uid}/unassign-plan`, { method:'POST' });
-      const userList = await api<User[]>('/auth/users');
-      setUsers(userList);
-    } catch (e:any) { setErr(`Unassign failed: ${e?.message || e}`); }
+  async function unassign(uid:string) {
+    await api(`/auth/users/${uid}/unassign-plan`, { method:'POST' });
+    await load();
   }
-
-  // Helpers for display
-  const usersOnSelectedPlan = useMemo(() => {
-    if (!selectedId) return [];
-    return users.filter(u => u.planId === selectedId);
-  }, [users, selectedId]);
 
   return (
-    <div style={{ maxWidth: 1100, margin:'0 auto' }}>
-      <h1>Plans</h1>
-
-      {err && <div style={{ background:'#fee', border:'1px solid #f99', padding:8, marginBottom:12 }}>{err}</div>}
-
-      {/* selector + actions */}
-      <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'center', marginBottom:12 }}>
-        <select value={selectedId} onChange={(e)=> setSelectedId(e.target.value)}>
-          <option value="">(new plan)</option>
-          {plans.map(p => <option key={p.id} value={p.id}>{p.name} — {p.weeks}w</option>)}
-        </select>
-
-        <button onClick={resetFormToTemplate}>New Plan (Template)</button>
-        <button onClick={savePlan} disabled={loading}>{selectedId ? 'Save Changes' : 'Create Plan'}</button>
-        <button onClick={deletePlan} disabled={!selectedId || loading}>Delete</button>
-        <button onClick={load} disabled={loading}>Refresh</button>
+    <div className="ua-container ua-section">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">Plans</h1>
+        <p className="text-black/70">Build blocks, edit days JSON, and assign to athletes.</p>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'minmax(280px, 1fr) minmax(380px, 1.4fr)', gap:16 }}>
-        <section>
-          <h3>Details</h3>
-          <div style={{ display:'grid', gap:8 }}>
-            <label>
-              <div style={{ fontSize:12, color:'#555' }}>Name</div>
-              <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Fall Block A" />
-            </label>
-            <label>
-              <div style={{ fontSize:12, color:'#555' }}>Weeks</div>
-              <input type="number" value={weeks} min={1} onChange={e=>setWeeks(Number(e.target.value)||1)} />
-            </label>
+      {err && <div className="ua-card p-4 mb-4 border-red-200 bg-red-50 text-sm text-red-700">{err}</div>}
+
+      {/* Selector + actions */}
+      <div className="ua-card p-4 mb-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <select className="ua-select sm:max-w-xs" value={selectedId} onChange={(e)=>setSelectedId(e.target.value)}>
+            <option value="">(new plan)</option>
+            {plans.map(p => <option key={p.id} value={p.id}>{p.name} — {p.weeks}w</option>)}
+          </select>
+          <div className="flex gap-2">
+            <button className="ua-btn ua-btn-ghost" onClick={()=>{ setSelectedId(''); setName(''); setWeeks(4); setDaysJson(JSON.stringify(DEFAULT_DAYS, null, 2)); }}>New</button>
+            <button className="ua-btn ua-btn-primary" onClick={(e)=>save(e as any)}>{selectedId ? 'Save Changes' : 'Create Plan'}</button>
+            <button className="ua-btn ua-btn-ghost" onClick={remove} disabled={!selectedId}>Delete</button>
+            <button className="ua-btn ua-btn-ghost" onClick={load}>Refresh</button>
           </div>
-
-          <div style={{ marginTop:12 }}>
-            <button onClick={() => {
-              try { setDaysJson(JSON.stringify(JSON.parse(daysJson||'[]'), null, 2)); } catch {}
-            }}>Pretty Format Days JSON</button>
-          </div>
-
-          {/* NEW: Assign UI */}
-          <div style={{ marginTop:24 }}>
-            <h3>Assign to Athlete</h3>
-            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-              <select value={assignUserId} onChange={e=>setAssignUserId(e.target.value)}>
-                <option value="">(select user)</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.role}{u.planId ? ' (has plan)' : ''}</option>)}
-              </select>
-              <button onClick={assignPlan} disabled={!selectedId || !assignUserId}>Assign</button>
-            </div>
-
-            <div style={{ marginTop:8, color:'#666' }}>
-              {selectedId ? (
-                usersOnSelectedPlan.length ? (
-                  <div>
-                    <div style={{ marginBottom:4 }}>On this plan:</div>
-                    <ul>
-                      {usersOnSelectedPlan.map(u => (
-                        <li key={u.id}>
-                          {u.name} — {u.role} <button onClick={()=>unassignPlan(u.id)} style={{ marginLeft:8 }}>Unassign</button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : <i>No athletes assigned to this plan.</i>
-              ) : <i>Select a plan to view assignments.</i>}
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <h3>Days (JSON)</h3>
-          <p style={{ color:'#666', marginTop:0 }}>Provide an array like:</p>
-          <pre style={{ background:'#f9f9f9', padding:8, border:'1px solid #eee', overflow:'auto' }}>
-{`[
-  { "id": "day1", "title": "Upper Power", "exercises": [
-    { "name": "Med Ball Chest Pass", "target": "3x5" }
-  ]}
-]`}
-          </pre>
-          <textarea
-            value={daysJson}
-            onChange={e=>setDaysJson(e.target.value)}
-            spellCheck={false}
-            rows={18}
-            style={{ width:'100%', fontFamily:'ui-monospace, Menlo, monospace' }}
-          />
-        </section>
+        </div>
       </div>
 
-      <h3 style={{ marginTop:20 }}>All Plans</h3>
-      <table border={1} cellPadding={6} style={{ width:'100%', borderCollapse:'collapse' }}>
-        <thead>
-          <tr><th>Name</th><th>Weeks</th><th>Created</th><th>Days (count)</th></tr>
-        </thead>
-        <tbody>
-          {plans.map(p => (
-            <tr key={p.id} style={{ background: p.id === selectedId ? '#f7fbff' : undefined }}>
-              <td><a href="#" onClick={(e)=>{ e.preventDefault(); setSelectedId(p.id); }}>{p.name}</a></td>
-              <td>{p.weeks}</td>
-              <td>{new Date(p.createdAt).toLocaleString()}</td>
-              <td>{Array.isArray(p.days) ? p.days.length : 0}</td>
+      {/* Plan Editor */}
+      <FormWrapper title={selectedId ? "Edit Plan" : "Create Plan"} onSubmit={save}>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <input className="ua-input sm:col-span-2" placeholder="Plan name" value={name} onChange={(e)=>setName(e.target.value)} />
+          <input type="number" min={1} className="ua-input" placeholder="Weeks" value={weeks} onChange={(e)=>setWeeks(Number(e.target.value)||1)} />
+        </div>
+        <div>
+          <label className="text-sm text-black/70">Days (JSON)</label>
+          <textarea className="ua-textarea mt-1" rows={12} spellCheck={false} value={daysJson} onChange={(e)=>setDaysJson(e.target.value)} />
+        </div>
+        <div className="flex gap-2">
+          <button className="ua-btn ua-btn-primary" type="submit">{selectedId ? 'Save Changes' : 'Create Plan'}</button>
+          <button type="button" className="ua-btn ua-btn-ghost" onClick={()=>{ try { setDaysJson(JSON.stringify(JSON.parse(daysJson||'[]'), null, 2)); } catch {} }}>Pretty JSON</button>
+        </div>
+      </FormWrapper>
+
+      {/* Assign */}
+      <FormWrapper title="Assign to Athlete" description="Select a user and assign the selected plan.">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <select className="ua-select" value={assignUserId} onChange={(e)=>setAssignUserId(e.target.value)}>
+            <option value="">(select user)</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name} — {u.role}{u.planId ? ' (has plan)' : ''}</option>)}
+          </select>
+          <button className="ua-btn ua-btn-primary sm:col-span-2" type="button" onClick={assign} disabled={!selectedId || !assignUserId}>Assign</button>
+        </div>
+
+        {selectedId && (
+          <div className="mt-3">
+            <div className="text-sm text-black/70 mb-1">On this plan:</div>
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {users.filter(u => u.planId === selectedId).map(u => (
+                <li key={u.id} className="ua-card p-3 flex items-center justify-between">
+                  <div>{u.name} — {u.role}</div>
+                  <button className="ua-btn ua-btn-ghost" type="button" onClick={()=>unassign(u.id)}>Unassign</button>
+                </li>
+              ))}
+              {!users.filter(u=>u.planId===selectedId).length && <li className="text-sm text-black/60">No athletes assigned.</li>}
+            </ul>
+          </div>
+        )}
+      </FormWrapper>
+
+      {/* List */}
+      <div className="ua-card p-4 mt-5 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="py-2 text-left">Name</th>
+              <th className="py-2 text-left">Weeks</th>
+              <th className="py-2 text-left">Created</th>
+              <th className="py-2 text-left">Days</th>
             </tr>
-          ))}
-          {!plans.length && <tr><td colSpan={4} style={{ color:'#666' }}>No plans yet</td></tr>}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {plans.map(p => (
+              <tr key={p.id} className="border-b last:border-0">
+                <td className="py-2">
+                  <a href="#" onClick={(e)=>{ e.preventDefault(); setSelectedId(p.id); }} className="text-[var(--ua-red)] hover:underline">{p.name}</a>
+                </td>
+                <td className="py-2">{p.weeks}</td>
+                <td className="py-2">{new Date(p.createdAt).toLocaleString()}</td>
+                <td className="py-2">{Array.isArray(p.days) ? p.days.length : 0}</td>
+              </tr>
+            ))}
+            {!plans.length && <tr><td colSpan={4} className="py-6 text-center text-black/60">No plans yet</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

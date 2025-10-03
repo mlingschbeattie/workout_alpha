@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api } from '../lib/api';
+import { useEffect, useState } from "react";
+import { api } from "../lib/api";
+import FormWrapper from "../components/FormWrapper";
 
-type User = { id:string; name:string; role:string; planId?:string|null; planStartDate?:string|null };
+type User = { id:string; name:string; role:string; planStartDate?:string|null; planId?:string|null };
 type Exercise = { id:string; name:string };
-
 type SuggestedDay = {
   user: User;
   plan: { id:string; name:string; weeks:number } | null;
@@ -16,11 +16,13 @@ export default function LogsPage() {
   const [me, setMe] = useState<User|null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [err, setErr] = useState("");
+
   const [form, setForm] = useState({ exerciseId:'', exerciseName:'', date:'', setNumber:1, reps:0, weight:0, rpe:'' });
 
-  // NEW: plan helpers
+  // Plan helpers
+  const [dateForPlan, setDateForPlan] = useState<string>('');
   const [suggestion, setSuggestion] = useState<SuggestedDay | null>(null);
-  const [dateForPlan, setDateForPlan] = useState<string>(''); // YYYY-MM-DD override
 
   useEffect(() => {
     api<User|any>('/auth/me').then((u:any)=>{ if (u && !u.error) setMe(u as User); });
@@ -34,8 +36,9 @@ export default function LogsPage() {
   }
   useEffect(()=>{ loadLogs(); }, [me]);
 
-  async function createLog() {
-    if (!me) return alert('Login first on Home page');
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    if (!me) return alert('Login first on Auth page');
     const body:any = {
       userId: me.id,
       date: form.date || new Date().toISOString().slice(0,10),
@@ -46,38 +49,26 @@ export default function LogsPage() {
     };
     if (form.exerciseId) body.exerciseId = form.exerciseId;
     if (form.exerciseName) body.exerciseName = form.exerciseName;
-    await api('/logs', { method:'POST', body: JSON.stringify(body) });
-    setForm({ exerciseId:'', exerciseName:'', date:'', setNumber:1, reps:0, weight:0, rpe:'' });
-    await loadLogs();
+    try {
+      await api('/logs', { method:'POST', body: JSON.stringify(body) });
+      setForm({ exerciseId:'', exerciseName:'', date:'', setNumber:1, reps:0, weight:0, rpe:'' });
+      await loadLogs();
+    } catch (e:any) { setErr(`Log failed: ${e?.message || e}`); }
   }
 
-  // NEW: load today's plan suggestion
+  function repsFromTarget(target?: string): number | undefined {
+    if (!target) return undefined;
+    const m = target.match(/(\d+)\s*x\s*(\d+)/i);
+    if (m) return Number(m[2]);
+    const m2 = target.match(/(\d+)/);
+    return m2 ? Number(m2[1]) : undefined;
+  }
+
   async function loadPlanSuggestion() {
     if (!me) { alert('Login first'); return; }
     const qs = dateForPlan ? `?date=${encodeURIComponent(dateForPlan)}` : '';
     const sug = await api<SuggestedDay>(`/plans/for-user/${me.id}${qs}`);
     setSuggestion(sug);
-  }
-
-  // NEW: set plan start (coach action)
-  async function setPlanStart(date: string) {
-    if (!me) return;
-    await api(`/auth/users/${me.id}/plan-start`, {
-      method: 'POST',
-      body: JSON.stringify({ date: date || null })
-    });
-    // refresh suggestion
-    await loadPlanSuggestion();
-  }
-
-  // NEW: parse reps from "4x6" etc.
-  function repsFromTarget(target?: string): number | undefined {
-    if (!target) return undefined;
-    const m = target.match(/(\d+)\s*x\s*(\d+)/i);
-    if (m) return Number(m[2]);
-    // fallback if single number present
-    const m2 = target.match(/(\d+)/);
-    return m2 ? Number(m2[1]) : undefined;
   }
 
   async function quickLogFromSuggestion(ex: { exerciseId?:string; name?:string; target?:string }) {
@@ -97,36 +88,35 @@ export default function LogsPage() {
   }
 
   return (
-    <div>
-      <h1>Logs</h1>
+    <div className="ua-container ua-section">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">Logs</h1>
+        <p className="text-black/70">Quickly log sets or prefill from your assigned plan.</p>
+      </div>
 
-      {/* Plan controls */}
-      <div style={{ border:'1px solid #e5e7eb', padding:12, borderRadius:8, marginBottom:12 }}>
-        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          <input type="date" value={dateForPlan} onChange={e=>setDateForPlan(e.target.value)} />
-          <button onClick={loadPlanSuggestion}>Load today’s plan</button>
-          <span style={{ color:'#666' }}>Current plan start:</span>
-          <input
-            type="date"
-            value={me?.planStartDate ? (me.planStartDate.slice(0,10)) : ''}
-            onChange={(e)=> setPlanStart(e.target.value)}
-          />
+      {err && <div className="ua-card p-4 mb-4 border-red-200 bg-red-50 text-sm text-red-700">{err}</div>}
+
+      {/* Plan suggestion panel */}
+      <div className="ua-card p-4 mb-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <input type="date" className="ua-input" value={dateForPlan} onChange={(e)=>setDateForPlan(e.target.value)} />
+          <button className="ua-btn ua-btn-ghost" onClick={loadPlanSuggestion}>Load today’s plan</button>
+          <a className="ua-btn ua-btn-ghost" href="/plans">Manage Plans</a>
         </div>
-
         {suggestion && (
-          <div style={{ marginTop:12 }}>
-            {!suggestion.plan && suggestion.message && <div style={{ color:'#666' }}>{suggestion.message}</div>}
+          <div className="mt-4">
+            {!suggestion.plan && suggestion.message && <div className="text-sm text-black/70">{suggestion.message}</div>}
             {suggestion.plan && suggestion.day && (
               <div>
-                <div style={{ marginBottom:6 }}>
-                  <b>{suggestion.plan.name}</b> — Day {Number(suggestion.dayIndex ?? 0)+1}: {suggestion.day.title || '(untitled)'}
+                <div className="mb-2 font-medium">
+                  {suggestion.plan.name} — Day {Number(suggestion.dayIndex ?? 0) + 1}: {suggestion.day.title || '(untitled)'}
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(220px, 1fr))', gap:8 }}>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {(suggestion.day.exercises || []).map((ex, i) => (
-                    <div key={i} style={{ border:'1px solid #eee', borderRadius:8, padding:8 }}>
-                      <div style={{ fontWeight:600 }}>{ex.name || 'Unnamed'}</div>
-                      <div style={{ color:'#666', fontSize:12 }}>{ex.target || ''}</div>
-                      <button style={{ marginTop:8 }} onClick={()=>quickLogFromSuggestion(ex)}>
+                    <div key={i} className="ua-card p-3">
+                      <div className="font-medium">{ex.name || 'Unnamed'}</div>
+                      <div className="text-sm text-black/70">{ex.target || ''}</div>
+                      <button className="ua-btn ua-btn-primary mt-2" onClick={()=>quickLogFromSuggestion(ex)}>
                         Log Set (prefill)
                       </button>
                     </div>
@@ -138,39 +128,53 @@ export default function LogsPage() {
         )}
       </div>
 
-      {/* manual entry */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6, minmax(120px, 1fr))', gap:8, marginBottom:12 }}>
-        <select value={form.exerciseId} onChange={e=>setForm(f=>({...f, exerciseId:e.target.value, exerciseName:''}))}>
-          <option value="">(select exercise)</option>
-          {exercises.map(x=> <option key={x.id} value={x.id}>{x.name}</option>)}
-        </select>
-        <input placeholder="Or custom name" value={form.exerciseName} onChange={e=>setForm(f=>({...f, exerciseName:e.target.value, exerciseId:''}))} />
-        <input type="date" value={form.date} onChange={e=>setForm(f=>({...f, date:e.target.value}))} />
-        <input type="number" placeholder="Set #" value={form.setNumber} onChange={e=>setForm(f=>({...f, setNumber:Number(e.target.value)}))} />
-        <input type="number" placeholder="Reps" value={form.reps} onChange={e=>setForm(f=>({...f, reps:Number(e.target.value)}))} />
-        <input type="number" placeholder="Weight" value={form.weight} onChange={e=>setForm(f=>({...f, weight:Number(e.target.value)}))} />
-        <input type="number" placeholder="RPE" value={form.rpe} onChange={e=>setForm(f=>({...f, rpe:e.target.value}))} />
-      </div>
-      <button onClick={createLog}>Add Log</button>
+      {/* Manual log form */}
+      <FormWrapper title="Add Log" onSubmit={create}>
+        <div className="grid gap-3 sm:grid-cols-6">
+          <select className="ua-select sm:col-span-2" value={form.exerciseId} onChange={(e)=>setForm(f=>({...f, exerciseId:e.target.value, exerciseName:''}))}>
+            <option value="">(select exercise)</option>
+            {exercises.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+          <input className="ua-input sm:col-span-2" placeholder="Or custom name" value={form.exerciseName} onChange={(e)=>setForm(f=>({...f, exerciseName:e.target.value, exerciseId:''}))} />
+          <input type="date" className="ua-input" value={form.date} onChange={(e)=>setForm(f=>({...f, date:e.target.value}))} />
+          <input type="number" className="ua-input" placeholder="Set #" value={form.setNumber} onChange={(e)=>setForm(f=>({...f, setNumber:Number(e.target.value)}))} />
+          <input type="number" className="ua-input" placeholder="Reps" value={form.reps} onChange={(e)=>setForm(f=>({...f, reps:Number(e.target.value)}))} />
+          <input type="number" className="ua-input" placeholder="Weight" value={form.weight} onChange={(e)=>setForm(f=>({...f, weight:Number(e.target.value)}))} />
+          <input type="number" className="ua-input" placeholder="RPE" value={form.rpe} onChange={(e)=>setForm(f=>({...f, rpe:e.target.value}))} />
+          <button className="ua-btn ua-btn-primary sm:col-span-2">Add Log</button>
+        </div>
+      </FormWrapper>
 
-      <h3 style={{ marginTop:16 }}>Recent</h3>
-      <table border={1} cellPadding={6} style={{ width:'100%', borderCollapse:'collapse' }}>
-        <thead><tr><th>Date</th><th>Exercise</th><th>Set</th><th>Reps</th><th>Weight</th><th>RPE</th><th>Volume</th></tr></thead>
-        <tbody>
-          {logs.map((l,i)=>(
-            <tr key={i}>
-              <td>{new Date(l.date).toLocaleDateString()}</td>
-              <td>{l.exercise?.name || l.exerciseName || '—'}</td>
-              <td>{l.setNumber}</td>
-              <td>{l.reps}</td>
-              <td>{l.weight}</td>
-              <td>{l.rpe ?? ''}</td>
-              <td>{l.volume}</td>
+      {/* Table */}
+      <div className="ua-card p-4 mt-5 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="py-2 text-left">Date</th>
+              <th className="py-2 text-left">Exercise</th>
+              <th className="py-2 text-left">Set</th>
+              <th className="py-2 text-left">Reps</th>
+              <th className="py-2 text-left">Weight</th>
+              <th className="py-2 text-left">RPE</th>
+              <th className="py-2 text-left">Volume</th>
             </tr>
-          ))}
-          {!logs.length && <tr><td colSpan={7} style={{ color:'#666' }}>No logs yet</td></tr>}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {logs.map((l,i)=>(
+              <tr key={i} className="border-b last:border-0">
+                <td className="py-2">{new Date(l.date).toLocaleDateString()}</td>
+                <td className="py-2">{l.exercise?.name || l.exerciseName || "—"}</td>
+                <td className="py-2">{l.setNumber}</td>
+                <td className="py-2">{l.reps}</td>
+                <td className="py-2">{l.weight}</td>
+                <td className="py-2">{l.rpe ?? ""}</td>
+                <td className="py-2">{l.volume}</td>
+              </tr>
+            ))}
+            {!logs.length && <tr><td colSpan={7} className="py-6 text-center text-black/60">No logs yet</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
